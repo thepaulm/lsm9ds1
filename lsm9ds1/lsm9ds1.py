@@ -142,7 +142,7 @@ class GPIOInterrupt:
         # Dividing sleep time by 300 instead of 30 double CPU load but cuts
         # IMU timestamp variation from about 20% to less than 1%
         sleep_time = (timeout / 1000.0) / 30
-        stop_time = time.monotonic_ns() + (timeout * 1000_000.0)
+        stop_time = time.monotonic_ns() + (timeout * 1000000.0)
         while not ready and time.monotonic_ns() < stop_time:
             ready = GPIO.input(self.gpio_pin)
             time.sleep(sleep_time)
@@ -150,7 +150,6 @@ class GPIOInterrupt:
 
 
 class I2CTransport():
-    data_ready_interrupt: GPIOInterrupt
     I2C_AG_ADDRESS = 0x6B
     I2C_MAG_ADDRESS = 0x1E
 
@@ -192,7 +191,6 @@ class SPITransport():
     __READ_FLAG = 0x80
     __MAGNETOMETER_READ_FLAG = 0xC0
     __DUMMY = 0xFF
-    data_ready_interrupt: GPIOInterrupt
 
     def __init__(self, spi_device, magnetometer, data_ready_pin=None):
         super().__init__()
@@ -206,7 +204,7 @@ class SPITransport():
     def _init_spi(self, spi_device):
         self.spi.open(0, spi_device)
         self.spi.mode = 0b00
-        self.spi.max_speed_hz = 8_000_000
+        self.spi.max_speed_hz = 8000000
 
     def close(self):
         self.spi.close()
@@ -240,6 +238,12 @@ class SPITransport():
 #
 # Main Interface: lsm9ds1
 #
+def make_i2c(i2cbus_no):
+    return lsm9ds1(
+        I2CTransport(i2cbus_no, I2CTransport.I2C_AG_ADDRESS),
+        I2CTransport(i2cbus_no, I2CTransport.I2C_MAG_ADDRESS))
+
+
 class lsm9ds1:
     AG_ID = 0b01101000
     MAG_ID = 0b00111101
@@ -250,12 +254,6 @@ class lsm9ds1:
     DPS_SENSOR_SCALE = 8.75 / 1000.0
     TEMP_SENSOR_SCALE = 59.5 / 1000.0
     TEMPC_0 = 25
-
-    @staticmethod
-    def make_i2c(i2cbus_no):
-        return lsm9ds1(
-            I2CTransport(i2cbus_no, I2CTransport.I2C_AG_ADDRESS),
-            I2CTransport(i2cbus_no, I2CTransport.I2C_MAG_ADDRESS))
 
     def __init__(self, ag_protocol, magnetometer_protocol, high_priority=False):
         self.ag = ag_protocol
