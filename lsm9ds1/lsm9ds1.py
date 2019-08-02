@@ -4,7 +4,6 @@ import math
 import spidev
 
 from RPi import GPIO
-from typing import Tuple, List
 from smbus2 import SMBusWrapper
 from abc import abstractmethod, ABC
 
@@ -46,77 +45,77 @@ class Register:
 # Status Classes
 #
 class AGStatus:
-    def __init__(self, status: int):
+    def __init__(self, status):
         self.status = status
 
     @property
-    def accelerometer_interrupt(self) -> bool:
+    def accelerometer_interrupt(self):
         return (self.status & 0x40) != 0
 
     @property
-    def gyroscope_interrupt(self) -> bool:
+    def gyroscope_interrupt(self):
         return (self.status & 0x20) != 0
 
     @property
-    def inactivity_interrupt(self) -> bool:
+    def inactivity_interrupt(self):
         return (self.status & 0x10) != 0
 
     @property
-    def boot_status(self) -> bool:
+    def boot_status(self):
         return (self.status & 0x08) != 0
 
     @property
-    def temperature_data_available(self) -> bool:
+    def temperature_data_available(self):
         return (self.status & 0x04) != 0
 
     @property
-    def gyroscope_data_available(self) -> bool:
+    def gyroscope_data_available(self):
         return (self.status & 0x02) != 0
 
     @property
-    def accelerometer_data_available(self) -> bool:
+    def accelerometer_data_available(self):
         return (self.status & 0x01) != 0
 
 
 class MagnetometerStatus:
-    def __init__(self, status: int):
+    def __init__(self, status):
         self.status = status
 
     @property
-    def overrun(self) -> bool:
+    def overrun(self):
         """data overrun on all axes"""
         return (self.status & 0x80) != 0
 
     @property
-    def z_overrun(self) -> bool:
+    def z_overrun(self):
         """Z axis data overrun"""
         return (self.status & 0x40) != 0
 
     @property
-    def y_overrun(self) -> bool:
+    def y_overrun(self):
         """Y axis data overrun"""
         return (self.status & 0x20) != 0
 
     @property
-    def x_overrun(self) -> bool:
+    def x_overrun(self):
         """X axis data overrun"""
         return (self.status & 0x10) != 0
 
     @property
-    def data_available(self) -> bool:
+    def data_available(self):
         """There's new data available for all axes."""
         return (self.status & 0x08) != 0
 
     @property
-    def z_axis_data_available(self) -> bool:
+    def z_axis_data_available(self):
         return (self.status & 0x04) != 0
 
     @property
-    def y_axis_data_available(self) -> bool:
+    def y_axis_data_available(self):
         return (self.status & 0x02) != 0
 
     @property
-    def x_axis_data_available(self) -> bool:
+    def x_axis_data_available(self):
         return (self.status & 0x01) != 0
 
 
@@ -125,7 +124,7 @@ class MagnetometerStatus:
 #
 class Interrupt(ABC):
     @abstractmethod
-    def wait_for(self, timeout: int) -> bool:
+    def wait_for(self, timeout):
         """Returns True if the interrupt happened and false
         if timeout milliseconds passed without an interrupt"""
         pass
@@ -143,7 +142,7 @@ class AbstractTransport(ABC):
         pass
 
     @abstractmethod
-    def write_byte(self, address: int, value: int) -> int:
+    def write_byte(self, address, value):
         """Writes a single byte to the given address
         :param address: the address to write to
         :param value: the byte to write
@@ -151,14 +150,14 @@ class AbstractTransport(ABC):
         pass
 
     @abstractmethod
-    def read_byte(self, address: int) -> int:
+    def read_byte(self, address):
         """Reads a single byte
         :param address: the address to read
         """
         pass
 
     @abstractmethod
-    def read_bytes(self, address: int, length: int) -> List[int]:
+    def read_bytes(self, address, length):
         """
         Reads 'length' bytes starting at 'address'
         :param address: the address to read
@@ -167,13 +166,13 @@ class AbstractTransport(ABC):
         pass
 
     @abstractmethod
-    def data_ready(self, timeout: int) -> bool:
+    def data_ready(self, timeout):
         """Waits for data to be ready."""
         pass
 
 
 class GPIOInterrupt(Interrupt):
-    def __init__(self, gpio_pin: int):
+    def __init__(self, gpio_pin):
         self.gpio_pin = gpio_pin
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.gpio_pin, GPIO.IN)
@@ -182,7 +181,7 @@ class GPIOInterrupt(Interrupt):
         """This method must be called to release the pin for use by other processes"""
         GPIO.cleanup(self.gpio_pin)
 
-    def wait_for(self, timeout: int) -> bool:
+    def wait_for(self, timeout):
         """
         Returns true if when the pin transitions from low to high.
         Assumes some other process will reset the pin to low.
@@ -205,7 +204,7 @@ class I2CTransport(AbstractTransport):
     I2C_AG_ADDRESS = 0x6B
     I2C_MAG_ADDRESS = 0x1E
 
-    def __init__(self, port: int, i2c_address: int, data_ready_pin: int = None):
+    def __init__(self, port, i2c_address, data_ready_pin=None):
         super().__init__()
         self.port = port
         self.i2c_device = i2c_address
@@ -217,22 +216,22 @@ class I2CTransport(AbstractTransport):
         if self.data_ready_interrupt:
             self.data_ready_interrupt.close()
 
-    def write_byte(self, address: int, value: int):
+    def write_byte(self, address, value):
         with SMBusWrapper(self.port) as bus:
             bus.write_byte_data(self.i2c_device, address, value)
 
-    def read_byte(self, address: int) -> int:
+    def read_byte(self, address):
         with SMBusWrapper(self.port) as bus:
             bus.write_byte(self.i2c_device, address)
             return bus.read_byte(self.i2c_device)
 
-    def read_bytes(self, address: int, length: int) -> List[int]:
+    def read_bytes(self, address, length):
         with SMBusWrapper(self.port) as bus:
             bus.write_byte(self.i2c_device, address)
             result = bus.read_i2c_block_data(self.i2c_device, address, length)
             return result
 
-    def data_ready(self, timeout: int) -> bool:
+    def data_ready(self, timeout):
         if self.data_ready_interrupt:
             return self.data_ready_interrupt.wait_for(timeout)
         else:
@@ -245,7 +244,7 @@ class SPITransport(AbstractTransport):
     __DUMMY = 0xFF
     data_ready_interrupt: GPIOInterrupt
 
-    def __init__(self, spi_device: int, magnetometer: bool, data_ready_pin: int = None):
+    def __init__(self, spi_device, magnetometer, data_ready_pin=None):
         super().__init__()
         self.magnetometer = magnetometer
         self.spi = spidev.SpiDev()
@@ -254,7 +253,7 @@ class SPITransport(AbstractTransport):
         if data_ready_pin:
             self.data_ready_interrupt = GPIOInterrupt(data_ready_pin)
 
-    def _init_spi(self, spi_device: int):
+    def _init_spi(self, spi_device):
         self.spi.open(0, spi_device)
         self.spi.mode = 0b00
         self.spi.max_speed_hz = 8_000_000
@@ -264,10 +263,10 @@ class SPITransport(AbstractTransport):
         if self.data_ready_interrupt:
             self.data_ready_interrupt.close()
 
-    def write_byte(self, address: int, value: int):
+    def write_byte(self, address, value):
         self.spi.writebytes([address, value])
 
-    def read_byte(self, address: int) -> int:
+    def read_byte(self, address):
         return self.spi.xfer([address | self.__READ_FLAG, self.__DUMMY])[1]
 
     def read_bytes(self, reg_address, length):
@@ -281,7 +280,7 @@ class SPITransport(AbstractTransport):
         response = self.spi.xfer(request)
         return response[1:]
 
-    def data_ready(self, timeout: int) -> bool:
+    def data_ready(self, timeout):
         if self.data_ready_interrupt:
             return self.data_ready_interrupt.wait_for(timeout)
         else:
@@ -308,8 +307,7 @@ class lsm9ds1:
             I2CTransport(i2cbus_no, I2CTransport.I2C_AG_ADDRESS),
             I2CTransport(i2cbus_no, I2CTransport.I2C_MAG_ADDRESS))
 
-    def __init__(self, ag_protocol: AbstractTransport, magnetometer_protocol: AbstractTransport,
-                 high_priority: bool = False):
+    def __init__(self, ag_protocol, magnetometer_protocol, high_priority=False):
         self.ag = ag_protocol
         self.mag = magnetometer_protocol
         # Needs to be a high priority process or it'll drop samples
@@ -407,15 +405,15 @@ class lsm9ds1:
     #
     # Raw interface
     #
-    def ag_data_ready(self, timeout_millis: int) -> bool:
+    def ag_data_ready(self, timeout_millis):
         return self.ag.data_ready(timeout_millis)
 
-    def read_ag_status(self) -> AGStatus:
+    def read_ag_status(self):
         """Returns the status byte for the accelerometer and gyroscope."""
         data = self.ag.read_byte(Register.STATUS_REG)
         return AGStatus(data)
 
-    def read_ag_data(self) -> Tuple[int, List[int], List[int]]:
+    def read_ag_data(self):
         """Returns the current temperature, acceleration and angular velocity
         values in one go. This is faster than fetching them independently.
         These values can be invalid unless they're read when the data is ready."""
@@ -425,17 +423,17 @@ class lsm9ds1:
         acc = lsm9ds1.to_vector_left_to_right_hand_rule(data[8:14])
         return temp, acc, gyro
 
-    def read_temperature(self) -> int:
+    def read_temperature(self):
         """Reads the temperature. See also read_ag_data()"""
         data = self.ag.read_bytes(Register.OUT_TEMP_L, 2)
         return lsm9ds1.to_int16(data)
 
-    def read_acceleration(self) -> List[int]:
+    def read_acceleration(self):
         """Reads the accelerations. See also read_ag_data()"""
         data = self.ag.read_bytes(Register.OUT_X_XL, 6)
         return lsm9ds1.to_vector_left_to_right_hand_rule(data)
 
-    def read_gyroscope(self) -> List[int]:
+    def read_gyroscope(self):
         """Reads the angular velocities. See also read_ag_data()"""
         data = self.ag.read_bytes(Register.OUT_X_G, 6)
         return lsm9ds1.to_vector_left_to_right_hand_rule(data)
@@ -443,7 +441,7 @@ class lsm9ds1:
     def magnetometer_data_ready(self, timout_millis: int) -> bool:
         return self.mag.data_ready(timout_millis)
 
-    def read_magnetometer_status(self) -> MagnetometerStatus:
+    def read_magnetometer_status(self):
         """Returns the status byte for the magnetometer"""
         data = self.mag.read_byte(Register.STATUS_REG_M)
         return MagnetometerStatus(data)
@@ -453,23 +451,23 @@ class lsm9ds1:
         mag = [m * lsm9ds1.GAUSS_SENSOR_SCALE for m in mag]
         return mag
 
-    def read_magnetometer(self) -> List[int]:
+    def read_magnetometer(self):
         """Reads the magnetometer field strengths"""
         data = self.mag.read_bytes(Register.OUT_X_L_M, 6)
         return lsm9ds1.to_vector(data)
 
     @staticmethod
-    def to_vector(data: List[int]) -> List[int]:
+    def to_vector(data):
         return [lsm9ds1.to_int16(data[0:2]), lsm9ds1.to_int16(data[2:4]), lsm9ds1.to_int16(data[4:6])]
 
     @staticmethod
-    def to_vector_left_to_right_hand_rule(data: List[int]) -> List[int]:
+    def to_vector_left_to_right_hand_rule(data):
         """Like to_vector except it converts from the left to the right hand rule
         by negating the x-axis."""
         return [-lsm9ds1.to_int16(data[0:2]), lsm9ds1.to_int16(data[2:4]), lsm9ds1.to_int16(data[4:6])]
 
     @staticmethod
-    def to_int16(data: List[int]) -> int:
+    def to_int16(data):
         """
         Converts little endian bytes into a signed 16-bit integer
         :param data: 16bit int in little endian, two's complement form
