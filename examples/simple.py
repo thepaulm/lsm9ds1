@@ -1,6 +1,6 @@
 import time
 
-from lsm9ds1_rjg import Driver, I2CTransport, SPITransport
+from lsm9ds1 import Driver, I2CTransport, SPITransport
 
 
 class SimpleExample:

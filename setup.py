@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="lsm9ds1-rjg",
+    name="lsm9ds1",
     version="0.9.2",
     author="Richard Gemmell",
     author_email="16683467+Richard-Gemmell@users.noreply.github.com",
