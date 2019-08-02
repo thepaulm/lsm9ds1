@@ -1,5 +1,6 @@
 import os
 import time
+import math
 from typing import Tuple, List
 
 from .abstract_transport import AbstractTransport
@@ -11,7 +12,15 @@ class Driver:
     AG_ID = 0b01101000
     MAG_ID = 0b00111101
 
-    def __init__(self, ag_protocol: AbstractTransport, magnetometer_protocol: AbstractTransport, high_priority: bool = False):
+    # from LSM9DS1_Datasheet.pdf
+    ACC_SENSOR_SCALE = 0.061 / 1000.0
+    GAUSS_SENSOR_SCALE = 0.14 / 1000.0
+    DPS_SENSOR_SCALE = 8.75 / 1000.0
+    TEMP_SENSOR_SCALE = 59.5 / 1000.0
+    TEMPC_0 = 25
+
+    def __init__(self, ag_protocol: AbstractTransport, magnetometer_protocol: AbstractTransport,
+                 high_priority: bool = False):
         self.ag = ag_protocol
         self.mag = magnetometer_protocol
         # Needs to be a high priority process or it'll drop samples
@@ -101,6 +110,14 @@ class Driver:
         acc = Driver.to_vector_left_to_right_hand_rule(data[8:14])
         return temp, acc, gyro
 
+    def read_values(self):
+        temp, acc, gyro = self.read_ag_data()
+        tempc = Driver.TEMPC_0 + temp * Driver.TEMP_SENSOR_SCALE
+        tempf = (tempc * 9/5) + 32
+        acc = [c * Driver.ACC_SENSOR_SCALE for c in acc]
+        gyro = [g * Driver.DPS_SENSOR_SCALE for g in gyro]
+        return tempf, acc, gyro
+
     def read_temperature(self) -> int:
         """Reads the temperature. See also read_ag_data()"""
         data = self.ag.read_bytes(Register.OUT_TEMP_L, 2)
@@ -123,6 +140,21 @@ class Driver:
         """Returns the status byte for the magnetometer"""
         data = self.mag.read_byte(Register.STATUS_REG_M)
         return MagnetometerStatus(data)
+
+    def mag_values(self):
+        mag = self.read_magnetometer()
+        mag = [m * Driver.GAUSS_SENSOR_SCALE for m in mag]
+        return mag
+
+    def mag_heading(self):
+        values = self.mag_values()
+        y = values[1]
+        x = values[0]
+        # z = values[0]
+        heading = math.atan2(y, x) * 180 / math.pi
+        if heading < 0:
+            heading += 360.0
+        return heading
 
     def read_magnetometer(self) -> List[int]:
         """Reads the magnetometer field strengths"""
