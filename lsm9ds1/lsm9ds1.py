@@ -5,7 +5,6 @@ import spidev
 
 from RPi import GPIO
 from smbus2 import SMBusWrapper
-from abc import abstractmethod, ABC
 
 
 #
@@ -122,56 +121,7 @@ class MagnetometerStatus:
 #
 # Transport Classes
 #
-class Interrupt(ABC):
-    @abstractmethod
-    def wait_for(self, timeout):
-        """Returns True if the interrupt happened and false
-        if timeout milliseconds passed without an interrupt"""
-        pass
-
-    @abstractmethod
-    def close(self):
-        """Releases any resources held by the interrupt"""
-        pass
-
-
-class AbstractTransport(ABC):
-    @abstractmethod
-    def close(self):
-        """Releases any resources held by the transport"""
-        pass
-
-    @abstractmethod
-    def write_byte(self, address, value):
-        """Writes a single byte to the given address
-        :param address: the address to write to
-        :param value: the byte to write
-        """
-        pass
-
-    @abstractmethod
-    def read_byte(self, address):
-        """Reads a single byte
-        :param address: the address to read
-        """
-        pass
-
-    @abstractmethod
-    def read_bytes(self, address, length):
-        """
-        Reads 'length' bytes starting at 'address'
-        :param address: the address to read
-        :param length: number of bytes to read
-        """
-        pass
-
-    @abstractmethod
-    def data_ready(self, timeout):
-        """Waits for data to be ready."""
-        pass
-
-
-class GPIOInterrupt(Interrupt):
+class GPIOInterrupt:
     def __init__(self, gpio_pin):
         self.gpio_pin = gpio_pin
         GPIO.setmode(GPIO.BCM)
@@ -199,7 +149,7 @@ class GPIOInterrupt(Interrupt):
         return ready
 
 
-class I2CTransport(AbstractTransport):
+class I2CTransport():
     data_ready_interrupt: GPIOInterrupt
     I2C_AG_ADDRESS = 0x6B
     I2C_MAG_ADDRESS = 0x1E
@@ -238,7 +188,7 @@ class I2CTransport(AbstractTransport):
             raise RuntimeError('I2CTransport needs a GPIO pin to support data_ready().')
 
 
-class SPITransport(AbstractTransport):
+class SPITransport():
     __READ_FLAG = 0x80
     __MAGNETOMETER_READ_FLAG = 0xC0
     __DUMMY = 0xFF
