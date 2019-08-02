@@ -1,6 +1,6 @@
 import time
 
-from lsm9ds1.lsm9ds1 import lsm9ds1, I2CTransport, SPITransport
+from lsm9ds1 import lsm9ds1
 
 
 class SimpleExample:
@@ -16,21 +16,8 @@ class SimpleExample:
     It queries the sensor to discover when the accelerometer/gyro
     has new data and then reads all the sensors."""
     def __init__(self):
-        # self.driver = self._create_spi_driver()
-        self.driver = self._create_i2c_driver()
+        self.driver = lsm9ds1.make_i2c(1)
         self.driver.configure()
-
-    @staticmethod
-    def _create_i2c_driver() -> lsm9ds1:
-        return lsm9ds1(
-            I2CTransport(1, I2CTransport.I2C_AG_ADDRESS),
-            I2CTransport(1, I2CTransport.I2C_MAG_ADDRESS))
-
-    @staticmethod
-    def _create_spi_driver() -> lsm9ds1:
-        return lsm9ds1(
-            SPITransport(0, False),
-            SPITransport(1, True))
 
     def main(self):
         try:

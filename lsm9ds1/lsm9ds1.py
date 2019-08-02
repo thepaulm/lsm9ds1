@@ -302,6 +302,12 @@ class lsm9ds1:
     TEMP_SENSOR_SCALE = 59.5 / 1000.0
     TEMPC_0 = 25
 
+    @staticmethod
+    def make_i2c(i2cbus_no):
+        return lsm9ds1(
+            I2CTransport(i2cbus_no, I2CTransport.I2C_AG_ADDRESS),
+            I2CTransport(i2cbus_no, I2CTransport.I2C_MAG_ADDRESS))
+
     def __init__(self, ag_protocol: AbstractTransport, magnetometer_protocol: AbstractTransport,
                  high_priority: bool = False):
         self.ag = ag_protocol
