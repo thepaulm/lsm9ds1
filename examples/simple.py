@@ -1,6 +1,6 @@
 import time
 
-from lsm9ds1 import Driver, I2CTransport, SPITransport
+from lsm9ds1.lsm9ds1 import lsm9ds1, I2CTransport, SPITransport
 
 
 class SimpleExample:
@@ -21,14 +21,14 @@ class SimpleExample:
         self.driver.configure()
 
     @staticmethod
-    def _create_i2c_driver() -> Driver:
-        return Driver(
+    def _create_i2c_driver() -> lsm9ds1:
+        return lsm9ds1(
             I2CTransport(1, I2CTransport.I2C_AG_ADDRESS),
             I2CTransport(1, I2CTransport.I2C_MAG_ADDRESS))
 
     @staticmethod
-    def _create_spi_driver() -> Driver:
-        return Driver(
+    def _create_spi_driver() -> lsm9ds1:
+        return lsm9ds1(
             SPITransport(0, False),
             SPITransport(1, True))
 
