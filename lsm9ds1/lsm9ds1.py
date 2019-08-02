@@ -1,11 +1,136 @@
 import os
 import time
 import math
-from typing import Tuple, List
+import spidev
 
-from .abstract_transport import AbstractTransport
-from .ag_status import AGStatus
-from .magnetometer_status import MagnetometerStatus
+from RPi import GPIO
+from typing import Tuple, List
+from smbus2 import SMBusWrapper
+from abc import abstractmethod, ABC
+
+
+class Interrupt(ABC):
+    @abstractmethod
+    def wait_for(self, timeout: int) -> bool:
+        """Returns True if the interrupt happened and false
+        if timeout milliseconds passed without an interrupt"""
+        pass
+
+    @abstractmethod
+    def close(self):
+        """Releases any resources held by the interrupt"""
+        pass
+
+
+class AbstractTransport(ABC):
+    @abstractmethod
+    def close(self):
+        """Releases any resources held by the transport"""
+        pass
+
+    @abstractmethod
+    def write_byte(self, address: int, value: int) -> int:
+        """Writes a single byte to the given address
+        :param address: the address to write to
+        :param value: the byte to write
+        """
+        pass
+
+    @abstractmethod
+    def read_byte(self, address: int) -> int:
+        """Reads a single byte
+        :param address: the address to read
+        """
+        pass
+
+    @abstractmethod
+    def read_bytes(self, address: int, length: int) -> List[int]:
+        """
+        Reads 'length' bytes starting at 'address'
+        :param address: the address to read
+        :param length: number of bytes to read
+        """
+        pass
+
+    @abstractmethod
+    def data_ready(self, timeout: int) -> bool:
+        """Waits for data to be ready."""
+        pass
+
+
+class AGStatus:
+    def __init__(self, status: int):
+        self.status = status
+
+    @property
+    def accelerometer_interrupt(self) -> bool:
+        return (self.status & 0x40) != 0
+
+    @property
+    def gyroscope_interrupt(self) -> bool:
+        return (self.status & 0x20) != 0
+
+    @property
+    def inactivity_interrupt(self) -> bool:
+        return (self.status & 0x10) != 0
+
+    @property
+    def boot_status(self) -> bool:
+        return (self.status & 0x08) != 0
+
+    @property
+    def temperature_data_available(self) -> bool:
+        return (self.status & 0x04) != 0
+
+    @property
+    def gyroscope_data_available(self) -> bool:
+        return (self.status & 0x02) != 0
+
+    @property
+    def accelerometer_data_available(self) -> bool:
+        return (self.status & 0x01) != 0
+
+
+class MagnetometerStatus:
+    def __init__(self, status: int):
+        self.status = status
+
+    @property
+    def overrun(self) -> bool:
+        """data overrun on all axes"""
+        return (self.status & 0x80) != 0
+
+    @property
+    def z_overrun(self) -> bool:
+        """Z axis data overrun"""
+        return (self.status & 0x40) != 0
+
+    @property
+    def y_overrun(self) -> bool:
+        """Y axis data overrun"""
+        return (self.status & 0x20) != 0
+
+    @property
+    def x_overrun(self) -> bool:
+        """X axis data overrun"""
+        return (self.status & 0x10) != 0
+
+    @property
+    def data_available(self) -> bool:
+        """There's new data available for all axes."""
+        return (self.status & 0x08) != 0
+
+    @property
+    def z_axis_data_available(self) -> bool:
+        return (self.status & 0x04) != 0
+
+    @property
+    def y_axis_data_available(self) -> bool:
+        return (self.status & 0x02) != 0
+
+    @property
+    def x_axis_data_available(self) -> bool:
+        return (self.status & 0x01) != 0
 
 
 class Driver:
@@ -209,3 +334,119 @@ class Register:
     CTRL_REG5_M = 0x24
     STATUS_REG_M = 0x27
     OUT_X_L_M = 0x28
+
+
+class GPIOInterrupt(Interrupt):
+    def __init__(self, gpio_pin: int):
+        self.gpio_pin = gpio_pin
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.gpio_pin, GPIO.IN)
+
+    def close(self):
+        """This method must be called to release the pin for use by other processes"""
+        GPIO.cleanup(self.gpio_pin)
+
+    def wait_for(self, timeout: int) -> bool:
+        """
+        Returns true if when the pin transitions from low to high.
+        Assumes some other process will reset the pin to low.
+        :param timeout: time to wait for the interrupt in milliseconds
+        :return: True if the interrupt happened. False if it timed out.
+        """
+        ready = False
+        # Dividing sleep time by 300 instead of 30 double CPU load but cuts
+        # IMU timestamp variation from about 20% to less than 1%
+        sleep_time = (timeout / 1000.0) / 30
+        stop_time = time.monotonic_ns() + (timeout * 1000_000.0)
+        while not ready and time.monotonic_ns() < stop_time:
+            ready = GPIO.input(self.gpio_pin)
+            time.sleep(sleep_time)
+        return ready
+
+
+class I2CTransport(AbstractTransport):
+    data_ready_interrupt: GPIOInterrupt
+    I2C_AG_ADDRESS = 0x6B
+    I2C_MAG_ADDRESS = 0x1E
+
+    def __init__(self, port: int, i2c_address: int, data_ready_pin: int = None):
+        super().__init__()
+        self.port = port
+        self.i2c_device = i2c_address
+        self.data_ready_interrupt = None
+        if data_ready_pin:
+            self.data_ready_interrupt = GPIOInterrupt(data_ready_pin)
+
+    def close(self):
+        if self.data_ready_interrupt:
+            self.data_ready_interrupt.close()
+
+    def write_byte(self, address: int, value: int):
+        with SMBusWrapper(self.port) as bus:
+            bus.write_byte_data(self.i2c_device, address, value)
+
+    def read_byte(self, address: int) -> int:
+        with SMBusWrapper(self.port) as bus:
+            bus.write_byte(self.i2c_device, address)
+            return bus.read_byte(self.i2c_device)
+
+    def read_bytes(self, address: int, length: int) -> List[int]:
+        with SMBusWrapper(self.port) as bus:
+            bus.write_byte(self.i2c_device, address)
+            result = bus.read_i2c_block_data(self.i2c_device, address, length)
+            return result
+
+    def data_ready(self, timeout: int) -> bool:
+        if self.data_ready_interrupt:
+            return self.data_ready_interrupt.wait_for(timeout)
+        else:
+            raise RuntimeError('I2CTransport needs a GPIO pin to support data_ready().')
+
+
+class SPITransport(AbstractTransport):
+    __READ_FLAG = 0x80
+    __MAGNETOMETER_READ_FLAG = 0xC0
+    __DUMMY = 0xFF
+    data_ready_interrupt: GPIOInterrupt
+
+    def __init__(self, spi_device: int, magnetometer: bool, data_ready_pin: int = None):
+        super().__init__()
+        self.magnetometer = magnetometer
+        self.spi = spidev.SpiDev()
+        self._init_spi(spi_device)
+        self.data_ready_interrupt = None
+        if data_ready_pin:
+            self.data_ready_interrupt = GPIOInterrupt(data_ready_pin)
+
+    def _init_spi(self, spi_device: int):
+        self.spi.open(0, spi_device)
+        self.spi.mode = 0b00
+        self.spi.max_speed_hz = 8_000_000
+
+    def close(self):
+        self.spi.close()
+        if self.data_ready_interrupt:
+            self.data_ready_interrupt.close()
+
+    def write_byte(self, address: int, value: int):
+        self.spi.writebytes([address, value])
+
+    def read_byte(self, address: int) -> int:
+        return self.spi.xfer([address | self.__READ_FLAG, self.__DUMMY])[1]
+
+    def read_bytes(self, reg_address, length):
+        request = [self.__DUMMY] * (length + 1)
+        if self.magnetometer:
+            # Need to set bit 1 for multi-byte reads by the magnetometer or we
+            # just keep reading the same byte
+            request[0] = reg_address | self.__MAGNETOMETER_READ_FLAG
+        else:
+            request[0] = reg_address | self.__READ_FLAG
+        response = self.spi.xfer(request)
+        return response[1:]
+
+    def data_ready(self, timeout: int) -> bool:
+        if self.data_ready_interrupt:
+            return self.data_ready_interrupt.wait_for(timeout)
+        else:
+            raise RuntimeError('SPITransport needs a GPIO pin to support data_ready().')
