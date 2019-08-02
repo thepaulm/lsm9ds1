@@ -16,7 +16,7 @@ class SimpleExample:
     It queries the sensor to discover when the accelerometer/gyro
     has new data and then reads all the sensors."""
     def __init__(self):
-        self.driver = lsm9ds1.make_i2c(1)
+        self.driver = lsm9ds1.make_i2c(0)
         self.driver.configure()
 
     def main(self):

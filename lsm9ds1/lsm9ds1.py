@@ -254,6 +254,8 @@ class lsm9ds1:
     DPS_SENSOR_SCALE = 8.75 / 1000.0
     TEMP_SENSOR_SCALE = 59.5 / 1000.0
     TEMPC_0 = 25
+    YMAG_IND = 1
+    XMAG_IND = 0
 
     def __init__(self, ag_protocol, magnetometer_protocol, high_priority=False):
         self.ag = ag_protocol
@@ -333,9 +335,9 @@ class lsm9ds1:
     def mag_heading(self):
         """Returns the heading in 360°"""
         values = self.mag_values()
-        y = values[1]
-        x = values[0]
-        # z = values[0]
+        y = values[lsm9ds1.YMAG_IND]
+        x = values[lsm9ds1.XMAG_IND]
+        # z = values[?]
         heading = math.atan2(y, x) * 180 / math.pi
         if heading < 0:
             heading += 360.0
