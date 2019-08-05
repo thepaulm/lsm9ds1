@@ -17,7 +17,10 @@ class SimpleExample:
     has new data and then reads all the sensors."""
     def __init__(self):
         self.driver = lsm9ds1.make_i2c(0)
-        self.driver.configure()
+        mc = lsm9ds1.MagCalibration(xmin=-0.3612, xmax=-0.17836000000000002,
+                                    ymin=-0.08750000000000001, ymax=0.07826000000000001,
+                                    heading_offset=95.3491645593403)
+        self.driver.configure(mc)
 
     def main(self):
         try:

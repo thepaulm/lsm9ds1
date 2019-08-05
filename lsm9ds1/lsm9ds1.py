@@ -1,10 +1,14 @@
 import os
 import time
 import math
+import json
 import spidev
+import threading
 
 from RPi import GPIO
 from smbus2 import SMBusWrapper
+
+MAX_INVALID_MAG = 99.0
 
 
 #
@@ -38,6 +42,21 @@ class Register:
     CTRL_REG5_M = 0x24
     STATUS_REG_M = 0x27
     OUT_X_L_M = 0x28
+
+
+class MagCalibration:
+    def __init__(self, xmin=MAX_INVALID_MAG, xmax=-MAX_INVALID_MAG, ymin=MAX_INVALID_MAG, ymax=-MAX_INVALID_MAG,
+                 heading_offset=0.0):
+        self.xmax = xmax
+        self.xmin = xmin
+        self.ymax = ymax
+        self.ymin = ymin
+        self.heading_offset = heading_offset
+
+    def to_json(self):
+        obj = {"xmin": self.xmin, "xmax": self.xmax, "ymin": self.ymin, "ymax": self.ymax,
+               "heading_offset": self.heading_offset}
+        return json.dumps(obj)
 
 
 #
@@ -260,6 +279,7 @@ class lsm9ds1:
     def __init__(self, ag_protocol, magnetometer_protocol, high_priority=False):
         self.ag = ag_protocol
         self.mag = magnetometer_protocol
+        self.mag_calibration = None
         # Needs to be a high priority process or it'll drop samples
         # when other processes are under heavy load.
         if high_priority:
@@ -267,8 +287,14 @@ class lsm9ds1:
             param = os.sched_param(priority)
             os.sched_setscheduler(0, os.SCHED_FIFO, param)
 
-    def configure(self):
-        """Resets the device and configures it"""
+    def set_mag_calibration(self, mag_calibration):
+        self.mag_calibration = mag_calibration
+
+    def configure(self, mag_calibration=None):
+        """Resets the device and configures it. Optionally pass in the mag calibration info"""
+
+        self.set_mag_calibration(mag_calibration)
+
         ###################################################
         #   - Bit 0 - SW_RESET - software reset for accelerometer and gyro - default 0
         #   - Bit 2 - IF_ADD_INC - automatic register increment for multibyte access - default 1
@@ -337,10 +363,15 @@ class lsm9ds1:
         values = self.mag_values()
         y = values[lsm9ds1.YMAG_IND]
         x = values[lsm9ds1.XMAG_IND]
-        # z = values[?]
-        heading = math.atan2(y, x) * 180 / math.pi
-        if heading < 0:
-            heading += 360.0
+        if self.mag_calibration is not None:
+            mc = self.mag_calibration
+            # scale these samples between -1:1
+            x = ((x - mc.xmin) / (mc.xmax - mc.xmin)) * 2 - 1
+            y = ((y - mc.ymin) / (mc.ymax - mc.ymin)) * 2 - 1
+        heading = math.atan2(y, x)
+        heading = (heading / (2 * math.pi)) * 360.0
+        if self.mag_calibration is not None:
+            heading = (heading + self.mag_calibration.heading_offset) % 360.0
         return heading
 
     def read_values(self):
@@ -424,3 +455,57 @@ class lsm9ds1:
         :return: an integer
         """
         return int.from_bytes(data, byteorder='little', signed=True)
+
+
+#
+# Run me as an application to get calibration info:
+#  python -m lsm9ds1.lsm9ds1
+#
+def poll_mag_calibration(imu, mc, evt, verbose=True):
+    """
+    Will poll the x, y mag gauss values in order to establish min, max
+    """
+    samples = 0
+    while not evt.is_set():
+        m = imu.mag_values()
+        samples += 1
+        x = m[lsm9ds1.XMAG_IND]
+        y = m[lsm9ds1.YMAG_IND]
+        if x < mc.xmin:
+            mc.xmin = x
+        if x > mc.xmax:
+            mc.xmax = x
+        if y < mc.ymin:
+            mc.ymin = y
+        if y > mc.ymax:
+            mc.ymax = y
+
+    if verbose:
+        print("%d samples." % samples)
+
+
+if __name__ == '__main__':
+    mc = MagCalibration()
+    evt = threading.Event()
+    imu = make_i2c(0)
+    calibration__thread = threading.Thread(target=poll_mag_calibration, args=[imu, mc, evt])
+    calibration__thread.start()
+
+    input("Rotate device at approximately 10 seconds per revolution, press enter when done >")
+    evt.set()
+    calibration__thread.join()
+    print(mc.to_json())
+
+    while True:
+        current = input("What direction am I currently facing (in 360°) >")
+        try:
+            current = float(current)
+            break
+        except Exception:
+            print("I need a floating point number for the heading")
+
+    imu.set_mag_calibration(mc)
+    observed = imu.mag_heading()
+
+    mc.heading_offset = current - observed
+    print(mc.to_json())
