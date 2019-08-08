@@ -54,9 +54,18 @@ class MagCalibration:
         self.heading_offset = heading_offset
 
     def to_json(self):
+        obj = self.to_dict()
+        return json.dumps(obj)
+
+    def to_dict(self):
         obj = {"xmin": self.xmin, "xmax": self.xmax, "ymin": self.ymin, "ymax": self.ymax,
                "heading_offset": self.heading_offset}
-        return json.dumps(obj)
+        return obj
+
+    @staticmethod
+    def from_dict(obj):
+        return MagCalibration(xmin=obj['xmin'], xmax=obj['xmax'], ymin=obj['ymin'], ymax=obj['ymax'],
+                              heading_offset=obj['heading_offset'])
 
 
 #
