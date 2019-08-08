@@ -484,10 +484,10 @@ def poll_mag_calibration(imu, mc, evt, verbose=True):
         print("%d samples." % samples)
 
 
-def run_interactive_calibration():
+def run_interactive_calibration(i2cbus_no):
     mc = MagCalibration()
     evt = threading.Event()
-    imu = make_i2c(0)
+    imu = make_i2c(i2cbus_no)
     calibration__thread = threading.Thread(target=poll_mag_calibration, args=[imu, mc, evt])
     calibration__thread.start()
 
@@ -511,5 +511,5 @@ def run_interactive_calibration():
 
 
 if __name__ == '__main__':
-    mc = run_interactive_calibration()
+    mc = run_interactive_calibration(0)
     print(mc.to_json())
