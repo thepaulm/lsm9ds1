@@ -484,7 +484,7 @@ def poll_mag_calibration(imu, mc, evt, verbose=True):
         print("%d samples." % samples)
 
 
-if __name__ == '__main__':
+def run_interactive_calibration():
     mc = MagCalibration()
     evt = threading.Event()
     imu = make_i2c(0)
@@ -494,7 +494,6 @@ if __name__ == '__main__':
     input("Rotate device at approximately 10 seconds per revolution, press enter when done >")
     evt.set()
     calibration__thread.join()
-    print(mc.to_json())
 
     while True:
         current = input("What direction am I currently facing (in 360°) >")
@@ -508,4 +507,9 @@ if __name__ == '__main__':
     observed = imu.mag_heading()
 
     mc.heading_offset = current - observed
+    return mc
+
+
+if __name__ == '__main__':
+    mc = run_interactive_calibration()
     print(mc.to_json())
