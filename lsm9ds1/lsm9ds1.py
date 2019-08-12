@@ -14,6 +14,7 @@ MAX_INVALID_MAG = 99.0
 #
 # Hardware Constants
 #
+# from LSM9DS1_Datasheet.pdf
 class Register:
     """Register constants"""
     WHO_AM_I = 0x0F
@@ -375,8 +376,10 @@ class lsm9ds1:
         if self.mag_calibration is not None:
             mc = self.mag_calibration
             # scale these samples between -1:1
-            x = ((x - mc.xmin) / (mc.xmax - mc.xmin)) * 2 - 1
-            y = ((y - mc.ymin) / (mc.ymax - mc.ymin)) * 2 - 1
+            if mc.xmax != mc.xmin:
+                x = ((x - mc.xmin) / (mc.xmax - mc.xmin)) * 2 - 1
+            if mc.ymax != mc.ymin:
+                y = ((y - mc.ymin) / (mc.ymax - mc.ymin)) * 2 - 1
         heading = math.atan2(y, x)
         heading = (heading / (2 * math.pi)) * 360.0
         if self.mag_calibration is not None:
@@ -500,7 +503,7 @@ def run_interactive_calibration(i2cbus_no):
     calibration__thread = threading.Thread(target=poll_mag_calibration, args=[imu, mc, evt])
     calibration__thread.start()
 
-    input("Rotate device at approximately 10 seconds per revolution, press enter when done >")
+    input("Rotate device for 2 revolutions at approximately 10 seconds per revolution press enter when done >")
     evt.set()
     calibration__thread.join()
 
