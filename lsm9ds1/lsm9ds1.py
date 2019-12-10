@@ -268,9 +268,11 @@ class SPITransport():
 # Main Interface: lsm9ds1
 #
 def make_i2c(i2cbus_no):
-    return lsm9ds1(
+    imu = lsm9ds1(
         I2CTransport(i2cbus_no, I2CTransport.I2C_AG_ADDRESS),
         I2CTransport(i2cbus_no, I2CTransport.I2C_MAG_ADDRESS))
+    imu.configure()
+    return imu
 
 
 class lsm9ds1:
@@ -431,7 +433,7 @@ class lsm9ds1:
         data = self.ag.read_bytes(Register.OUT_X_G, 6)
         return lsm9ds1.to_vector_left_to_right_hand_rule(data)
 
-    def magnetometer_data_ready(self, timout_millis: int) -> bool:
+    def magnetometer_data_ready(self, timout_millis):
         return self.mag.data_ready(timout_millis)
 
     def read_magnetometer_status(self):
